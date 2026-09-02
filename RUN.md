@@ -21,9 +21,21 @@ cd py-llm-wiki
 
 ### 2. 安装后端
 
+二选一（Makefile 自动检测：优先 `.venv`，否则用当前激活环境的 python）：
+
+**方式 A：venv**
+
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -e ".[dev]"
+```
+
+**方式 B：conda（推荐给 conda 用户）**
+
+```bash
+conda create -n py-llm-wiki python=3.12 -y
+conda activate py-llm-wiki
+pip install -e ".[dev]"
 ```
 
 ### 3. 安装前端
@@ -47,6 +59,8 @@ cd frontend && npm install && cd ..
 make backend     # 终端 1：后端 http://127.0.0.1:19828
 make frontend    # 终端 2：前端 http://localhost:1420
 ```
+
+conda 用户先 `conda activate py-llm-wiki`（若 `.venv` 不存在，Makefile 自动使用 conda 环境；也可显式 `make backend PY=python`）。
 
 ### 6. 打开主页面
 
