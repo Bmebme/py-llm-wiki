@@ -193,24 +193,48 @@ def import_project_archive(archivePath: str, destination: str) -> str:
 # --- file watcher (M5) ------------------------------------------------------
 
 
+def _watcher_project_path(projectId: str = "", projectPath: str = "") -> str:
+    """前端可能传 projectId（UUID/路径/current）、projectPath 或都不传。
+    优先 projectPath；其次按 projectId 解析；最后用注册表当前项目。"""
+    if projectPath:
+        return projectPath
+    if projectId:
+        try:
+            from backend.core import project_registry
+
+            return project_registry.resolve_project(projectId)["path"]
+        except Exception:
+            pass
+    from backend.core import project_registry
+
+    return project_registry.current_project_path()
+
+
 @command("start_project_file_watcher")
-def start_project_file_watcher(projectPath: str) -> str:
+def start_project_file_watcher(
+    projectId: str = "", projectPath: str = "", sourceWatchConfig: dict | None = None
+) -> str:
     from backend.ingest.watch import start_project_file_watcher as start_watch
 
-    return start_watch(projectPath)
+    return start_watch(_watcher_project_path(projectId, projectPath))
 
 
 @command("stop_project_file_watcher")
-def stop_project_file_watcher(projectPath: str) -> str:
+def stop_project_file_watcher(projectId: str = "", projectPath: str = "") -> str:
     from backend.ingest.watch import stop_project_file_watcher as stop_watch
 
-    return stop_watch(projectPath)
+    path = _watcher_project_path(projectId, projectPath)
+    return stop_watch(path) if path else "not-running"
 
 
 @command("rescan_project_files")
-def rescan_project_files(projectPath: str) -> None:
+def rescan_project_files(
+    projectId: str = "", projectPath: str = "", sourceWatchConfig: dict | None = None
+) -> None:
     """Scan raw/sources and enqueue any file not yet ingested
-    (cache-miss) — the deterministic rescan the API endpoint triggers."""
+    (cache-miss) — the deterministic rescan the API endpoint triggers.
+    projectId/sourceWatchConfig 为前端传入的附加参数，暂不参与扫描逻辑。"""
+    projectPath = _watcher_project_path(projectId, projectPath)
     import asyncio
 
     from pathlib import Path
