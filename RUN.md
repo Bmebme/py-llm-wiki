@@ -1,0 +1,92 @@
+# py-llm-wiki 运行指南
+
+llm_wiki（Karpathy LLM Wiki 方法论）的 Python/FastAPI 重编译版 —— 与桌面版 19828 API 契约兼容的自我构建知识库。
+
+## 环境要求
+
+| 依赖 | 版本 |
+|------|------|
+| Python | ≥ 3.11（本项目在 3.12 验证通过） |
+| Node.js | ≥ 18 + npm |
+| 系统 | macOS / Linux |
+
+## 快速开始（从零到页面）
+
+### 1. 获取代码
+
+```bash
+git clone https://github.com/Bmebme/py-llm-wiki.git
+cd py-llm-wiki
+```
+
+### 2. 安装后端
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -e ".[dev]"
+```
+
+### 3. 安装前端
+
+```bash
+cd frontend && npm install && cd ..
+```
+
+### 4. 配置 LLM
+
+两种方式任选：
+
+- **页面配置**（推荐）：启动后在设置页选 Provider 为 custom，填 OpenAI 兼容端点与 API Key（如 DeepSeek：`https://api.deepseek.com`）
+- **直接编辑**：`~/.py-llm-wiki/app-state.json` 的 `llmConfig` 字段
+
+⚠️ 配置文件含 API Key，**不要提交进仓库**。
+
+### 5. 启动
+
+```bash
+make backend     # 终端 1：后端 http://127.0.0.1:19828
+make frontend    # 终端 2：前端 http://localhost:1420
+```
+
+### 6. 打开主页面
+
+浏览器访问 **http://localhost:1420**（前端把 `/api` 同源代理到 19828，只需访问这一个地址）。
+
+## 验证与测试
+
+```bash
+make test                        # 单元测试（当前 180 passed）
+make test-real-llm               # 真实 LLM 集成测试（会调用模型产生费用）
+curl http://127.0.0.1:19828/api/v1/health    # 后端健康检查
+```
+
+## 调试
+
+```bash
+# 后端热重载
+.venv/bin/uvicorn backend.main:app --reload --port 19828
+
+# 断点调试：pytest 或 uvicorn 直接挂 IDE（纯 Python，无编译步骤）
+```
+
+代码结构：
+
+| 目录 | 职责 |
+|------|------|
+| `backend/api/` | HTTP 路由（19828 契约） |
+| `backend/search/` | 混合检索引擎（关键词 + 向量 + 一跳图） |
+| `backend/ingest/` | 摄入管线（两步思维链、队列、Source Watch） |
+| `backend/chat/` | Chat Agent（工具调用） |
+| `backend/graph/` | 关联图（relevance 计算） |
+| `backend/wiki/` | 页面/索引/日志/wikilink 处理 |
+
+项目数据：每个 wiki 项目是一个目录（`wiki/` 页面 + `raw/` 原文 + `.llm-wiki/` 状态），项目注册表在 `~/.py-llm-wiki/app-state.json`。
+
+## 常见问题
+
+| 症状 | 处理 |
+|------|------|
+| 端口占用 | `lsof -i :19828` / `lsof -i :1420` 找到进程后 kill |
+| 前端起不来 | 确认 `frontend/node_modules` 已安装（`npm install`） |
+| 页面显示旧项目 | 注册表里有 `/tmp` 测试项目残留，在设置里新建/导入自己的项目 |
+| 后端报错 | 检查 `~/.py-llm-wiki/app-state.json` 的 llmConfig 是否有效 |
