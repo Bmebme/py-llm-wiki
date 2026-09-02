@@ -55,9 +55,20 @@ cd frontend && npm install && cd ..
 
 ### 5. 启动
 
+**后台模式（推荐，一条命令，不占终端）**：
+
 ```bash
-make backend     # 终端 1：后端 http://127.0.0.1:19828
-make frontend    # 终端 2：前端 http://localhost:1420
+make dev-bg       # 后端 + 前端都后台启动
+make stop         # 全部停止
+```
+
+日志：`/tmp/py-llm-wiki-backend.log` / `/tmp/py-llm-wiki-frontend.log`
+
+**前台模式（调试用，阻塞当前终端）**：
+
+```bash
+make backend      # 终端 1：后端 http://127.0.0.1:19828
+make frontend     # 终端 2：前端 http://localhost:1420
 ```
 
 conda 用户先 `conda activate py-llm-wiki`（若 `.venv` 不存在，Makefile 自动使用 conda 环境；也可显式 `make backend PY=python`）。
