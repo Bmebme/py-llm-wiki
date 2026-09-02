@@ -14,14 +14,12 @@ def _task(project_id="pid-1", rel="raw/sources/a.md", kind="created", status="pe
 
 def test_merge_creates_queue_file_and_marks_done(tmp_path):
     project = str(tmp_path)
-    enqueued: list[list[str]] = []
 
-    queue, added = fsq.merge_tasks(project, "pid-1", [_task()], enqueued.append)
+    queue, added = fsq.merge_tasks(project, "pid-1", [_task()])
 
     assert len(added) == 1
     assert added[0]["status"] == "done"
     assert queue["tasks"][0]["status"] == "done"
-    assert enqueued == [["raw/sources/a.md"]]
     persisted = json.loads(
         (tmp_path / ".llm-wiki" / "file-change-queue.json").read_text(encoding="utf-8")
     )
@@ -34,15 +32,32 @@ def test_merge_dedupes_duplicates_within_batch(tmp_path):
     project = str(tmp_path)
     first = _task()
     dup = _task()
-    queue, added = fsq.merge_tasks(project, "pid-1", [first, dup], lambda paths: None)
+    queue, added = fsq.merge_tasks(project, "pid-1", [first, dup])
 
     assert len(added) == 1
     assert len(queue["tasks"]) == 1
 
 
+def test_merge_blocks_failed_duplicates(tmp_path):
+    """失败任务未解决时，同一文件再次 rescan 不新增任务（防队列膨胀）。"""
+    project = str(tmp_path)
+    first = _task()
+    fsq.merge_tasks(project, "pid-1", [first])
+    # 模拟任务失败：手动写回 failed 状态
+    with fsq._lock(project):
+        queue = fsq.read_queue(project)
+        queue["tasks"][0]["status"] = "failed"
+        fsq.write_queue(project, queue)
+
+    queue, added = fsq.merge_tasks(project, "pid-1", [_task()])
+
+    assert added == []
+    assert len(queue["tasks"]) == 1
+
+
 def test_retry_resets_status_and_reenqueues(tmp_path):
     project = str(tmp_path)
-    queue, added = fsq.merge_tasks(project, "pid-1", [_task()], lambda paths: None)
+    queue, added = fsq.merge_tasks(project, "pid-1", [_task()])
     task_id = added[0]["id"]
     reenqueued: list[list[str]] = []
 
@@ -55,7 +70,7 @@ def test_retry_resets_status_and_reenqueues(tmp_path):
 
 def test_ignore_removes_task(tmp_path):
     project = str(tmp_path)
-    queue, added = fsq.merge_tasks(project, "pid-1", [_task()], lambda paths: None)
+    queue, added = fsq.merge_tasks(project, "pid-1", [_task()])
     task_id = added[0]["id"]
 
     queue = fsq.ignore_task(project, "pid-1", task_id)

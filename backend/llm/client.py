@@ -56,6 +56,20 @@ class LlmError(FsError):
     """User-facing LLM request error (subclass of FsError)."""
 
 
+class UsageLimitError(LlmError):
+    """Provider rate-limit / quota error — the ingest queue pauses on this."""
+
+
+_USAGE_LIMIT_PATTERN = re.compile(
+    r"429|rate[_\s-]*limit|usage\s+limit|quota|too many requests|exceeded",
+    re.IGNORECASE,
+)
+
+
+def _is_usage_limit_message(message: str) -> bool:
+    return bool(message) and bool(_USAGE_LIMIT_PATTERN.search(message))
+
+
 class RequestCancelled(Exception):
     """User-initiated cancel. Maps to llm-client.ts's silent onDone."""
 
@@ -322,6 +336,8 @@ async def _check_http_response(response: httpx.Response, config: dict[str, Any])
     except Exception:
         # Ignore body read failure (TS catches and ignores too).
         pass
+    if response.status_code == 429:
+        raise UsageLimitError(error_detail)
     if (
         response.status_code == 404
         and (
@@ -384,6 +400,8 @@ def _process_line(
         return None, events
     error = parse_endpoint_error_envelope(trimmed)
     if error:
+        if _is_usage_limit_message(error):
+            raise UsageLimitError(error)
         return error, events
     return None, events
 

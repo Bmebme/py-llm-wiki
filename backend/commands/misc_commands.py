@@ -274,9 +274,7 @@ def _rescan_result(project_id: str, project_path: str) -> dict:
     if not tasks:
         queue = fs_queue.read_queue(project_path)
         return {"queue": queue, "changedTasks": []}
-    queue, added = fs_queue.merge_tasks(
-        project_path, project_id, tasks, _ingest_enqueue_cb(project_path)
-    )
+    queue, added = fs_queue.merge_tasks(project_path, project_id, tasks)
     return {"queue": queue, "changedTasks": added}
 
 

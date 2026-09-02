@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from backend.core.file_service import FsError
+from backend.llm.client import UsageLimitError
 
 MAX_RETRIES = 3
 USAGE_LIMIT_AUTO_RESUME_SECS = 15 * 60
@@ -83,6 +84,7 @@ class ProjectIngestQueue:
     def __init__(self, project_path: str):
         self.project_path = project_path.rstrip("/")
         self.tasks: list[IngestTask] = []
+        self._restored = False
         self.paused = False
         self.restored_paused_task_ids: set[str] = set()
         self.worker_busy = False
@@ -119,21 +121,40 @@ class ProjectIngestQueue:
 
     async def restore(self) -> None:
         """Port of restoreQueue (ingest-queue.ts:769-903): processing →
-        pending, restored tasks are NOT auto-run."""
+        pending, restored tasks are NOT auto-run.
+
+        采用按 id 合并语义而非整体覆盖：内存中已有的任务（可能正在被
+        处理或刚入队）保留其最新状态，只补充磁盘上独有的遗留任务。
+        避免恢复动作与正在运行的任务互相踩踏。"""
         try:
             raw = json.loads(self._queue_file().read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             return
         if not isinstance(raw, list):
             return
-        self.tasks = []
+        disk: list[IngestTask] = []
         for entry in raw:
             task = IngestTask.from_dict(entry)
             if task.status == "processing":
                 task.status = "pending"
-            self.tasks.append(task)
-        self.restored_paused_task_ids = {t.id for t in self.tasks}
+            disk.append(task)
+        mem_by_id = {t.id: t for t in self.tasks}
+        merged: list[IngestTask] = []
+        for task in disk:
+            merged.append(mem_by_id.pop(task.id, task))
+        # 内存中磁盘上没有的新任务（恢复期间刚入队的）追加在尾部
+        merged.extend(mem_by_id.values())
+        self.tasks = merged
+        self.restored_paused_task_ids = {t.id for t in disk}
         self.epoch += 1
+
+    async def restore_and_start(self) -> None:
+        """Restore persisted tasks and start the worker (startup path)."""
+        if self._restored:
+            return
+        self._restored = True
+        await self.restore()
+        self.start_worker()
 
     # --- mutation ---------------------------------------------------------
 
@@ -167,6 +188,7 @@ class ProjectIngestQueue:
         await self.save()
         await self._emit({"kind": "enqueued", "task": task.to_dict()})
         self._wake.set()
+        self.start_worker()
         return task
 
     async def enqueue_batch(
@@ -192,6 +214,7 @@ class ProjectIngestQueue:
             for task in added:
                 await self._emit({"kind": "enqueued", "task": task.to_dict()})
             self._wake.set()
+            self.start_worker()
         return added
 
     async def cancel(self, task_id: str) -> bool:
@@ -326,10 +349,6 @@ class ProjectIngestQueue:
         }
 
 
-class UsageLimitError(Exception):
-    """Provider rate-limit / quota error — pauses the queue 15 min."""
-
-
 class IngestCancelled(Exception):
     """Task was cancelled by the user mid-processing."""
 
@@ -345,4 +364,8 @@ def get_queue(project_path: str) -> ProjectIngestQueue:
         queue = ProjectIngestQueue(key)
         queue.processor = _DEFAULT_PROCESSOR
         _registry[key] = queue
+        # 启动路径：恢复磁盘上遗留的任务（processing → pending）并拉起 worker。
+        # 否则重启后内存队列为空，磁盘上的任务永远不会被处理。
+        loop = asyncio.get_event_loop()
+        loop.create_task(queue.restore_and_start())
     return queue

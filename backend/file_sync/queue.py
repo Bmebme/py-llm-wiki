@@ -88,10 +88,12 @@ def new_task(project_id: str, rel_path: str, kind: str, size: int, mtime_ms: int
 
 
 def _active_key(task: dict) -> tuple:
-    """Dedupe key: a pending/processing task for the same file+kind is the
-    same logical change; done/failed history may accumulate."""
+    """Dedupe key: an unresolved task (pending/processing/failed) for the
+    same file+kind is the same logical change; done/cancelled history may
+    accumulate. Failed 任务阻止重复入队——避免失败文件在每次 rescan 时
+    反复新增任务造成队列膨胀与重复摄入。"""
     status = task.get("status")
-    if status in ("pending", "processing"):
+    if status in ("pending", "processing", "failed"):
         return (task.get("path"), task.get("kind"))
     return (task.get("id"),)
 
@@ -112,10 +114,12 @@ def merge_tasks(
     project_path: str,
     project_id: str,
     tasks: list[dict],
-    enqueue_cb: Callable[[list[str]], None],
 ) -> tuple[dict, list[dict]]:
-    """Append new tasks (deduped against active ones), hand created/modified
-    files to the ingest queue and mark them done.
+    """Append new tasks (deduped against unresolved ones) and mark them done.
+
+    摄入由前端管线驱动（processFileChangeBatch → enqueueSourceIngest），
+    后端不重复入 ingest 队列——否则同一文件会被双队列同时摄入，触发
+    供应商限流（429）。
     Returns (merged_queue, actually_added_tasks)."""
     with _lock(project_path):
         queue = read_queue(project_path)
@@ -129,20 +133,9 @@ def merge_tasks(
             active.add(key)
             queue["tasks"].append(task)
             added.append(task)
-        if added:
-            ingest_paths = [
-                t["path"]
-                for t in added
-                if t.get("kind") in ("created", "modified")
-            ]
-            if ingest_paths:
-                try:
-                    enqueue_cb(ingest_paths)
-                except Exception:
-                    pass
-            for task in added:
-                task["status"] = "done"
-                task["updatedAt"] = now_ms
+        for task in added:
+            task["status"] = "done"
+            task["updatedAt"] = now_ms
         queue = _prune(queue, now_ms)
         write_queue(project_path, queue)
         return queue, added
