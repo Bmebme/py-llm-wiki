@@ -225,23 +225,36 @@ def _project_id_for(projectId: str, projectPath: str) -> str:
         return projectId or projectPath
 
 
-def _rescan_result(project_id: str, project_path: str) -> dict:
-    """启动时扫描 raw/sources 中未摄入的文件（cache-miss），构造与前端
-    FileChangeRescanResult 对齐的返回结构（queue + changedTasks）。"""
+def _ingest_enqueue_cb(project_path: str):
+    """返回一个回调：把变更文件排进 ingest 队列（调度在事件循环上执行）。"""
     import asyncio
-    import time
-    import uuid
+
+    from backend.ingest import queue as ingest_queue
+
+    q = ingest_queue.get_queue(project_path)
+
+    def cb(paths: list[str]) -> None:
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = asyncio.get_event_loop()
+        loop.create_task(q.enqueue_batch(paths))
+
+    return cb
+
+
+def _rescan_result(project_id: str, project_path: str) -> dict:
+    """启动时扫描 raw/sources 中未摄入的文件（cache-miss），合并进持久化
+    变更队列（.llm-wiki/file-change-queue.json）并交给 ingest 队列；
+    返回与前端 FileChangeRescanResult 对齐的结构（queue + changedTasks）。"""
     from pathlib import Path
 
+    from backend.file_sync import queue as fs_queue
     from backend.ingest import cache as ingest_cache
-    from backend.ingest import queue as ingest_queue
     from backend.ingest.sources import is_ingestable_source_path
 
     sources_root = Path(project_path) / "raw" / "sources"
-    ingest_q = ingest_queue.get_queue(project_path)
-    now_ms = int(time.time() * 1000)
     tasks: list[dict] = []
-    pending: list[str] = []
     if sources_root.exists():
         for entry in sorted(sources_root.rglob("*")):
             if not entry.is_file():
@@ -252,28 +265,19 @@ def _rescan_result(project_id: str, project_path: str) -> dict:
             content = entry.read_text(encoding="utf-8", errors="replace")
             if ingest_cache.check_ingest_cache(project_path, rel, content) is not None:
                 continue
-            pending.append(rel)
             st = entry.stat()
             tasks.append(
-                {
-                    "id": uuid.uuid4().hex,
-                    "projectId": project_id,
-                    "path": rel,
-                    "kind": "created",
-                    "status": "pending",
-                    "hashBefore": None,
-                    "hashAfter": None,
-                    "size": st.st_size,
-                    "mtimeMs": int(st.st_mtime * 1000),
-                    "createdAt": now_ms,
-                    "updatedAt": now_ms,
-                    "retryCount": 0,
-                }
+                fs_queue.new_task(
+                    project_id, rel, "created", st.st_size, int(st.st_mtime * 1000)
+                )
             )
-    if pending:
-        loop = asyncio.get_event_loop()
-        loop.create_task(ingest_q.enqueue_batch(pending))
-    return {"queue": {"version": 0, "tasks": tasks}, "changedTasks": tasks}
+    if not tasks:
+        queue = fs_queue.read_queue(project_path)
+        return {"queue": queue, "changedTasks": []}
+    queue, added = fs_queue.merge_tasks(
+        project_path, project_id, tasks, _ingest_enqueue_cb(project_path)
+    )
+    return {"queue": queue, "changedTasks": added}
 
 
 @command("start_project_file_watcher")
@@ -307,15 +311,36 @@ def rescan_project_files(
 
 
 @command("get_file_change_queue")
-def get_file_change_queue(**kwargs) -> list[dict]:
-    return []
+def get_file_change_queue(projectPath: str = "") -> dict:
+    from backend.file_sync import queue as fs_queue
+
+    path = _watcher_project_path("", projectPath)
+    if not path:
+        return {"version": 0, "tasks": []}
+    return fs_queue.read_queue(path)
 
 
 @command("retry_file_change_task")
-def retry_file_change_task(**kwargs) -> None:
-    return None
+def retry_file_change_task(
+    projectId: str = "", projectPath: str = "", taskId: str = ""
+) -> dict:
+    from backend.file_sync import queue as fs_queue
+
+    path = _watcher_project_path(projectId, projectPath)
+    if not path or not taskId:
+        return {"version": 0, "tasks": []}
+    return fs_queue.retry_task(
+        path, _project_id_for(projectId, path), taskId, _ingest_enqueue_cb(path)
+    )
 
 
 @command("ignore_file_change_task")
-def ignore_file_change_task(**kwargs) -> None:
-    return None
+def ignore_file_change_task(
+    projectId: str = "", projectPath: str = "", taskId: str = ""
+) -> dict:
+    from backend.file_sync import queue as fs_queue
+
+    path = _watcher_project_path(projectId, projectPath)
+    if not path or not taskId:
+        return {"version": 0, "tasks": []}
+    return fs_queue.ignore_task(path, _project_id_for(projectId, path), taskId)
