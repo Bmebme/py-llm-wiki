@@ -210,13 +210,81 @@ def _watcher_project_path(projectId: str = "", projectPath: str = "") -> str:
     return project_registry.current_project_path()
 
 
+def _project_id_for(projectId: str, projectPath: str) -> str:
+    try:
+        from backend.core import project_registry
+
+        if projectId:
+            return project_registry.resolve_project(projectId)["id"]
+        if projectPath:
+            return project_registry.resolve_project(projectPath)["id"]
+        return project_registry.resolve_project(
+            project_registry.current_project_path()
+        )["id"]
+    except Exception:
+        return projectId or projectPath
+
+
+def _rescan_result(project_id: str, project_path: str) -> dict:
+    """启动时扫描 raw/sources 中未摄入的文件（cache-miss），构造与前端
+    FileChangeRescanResult 对齐的返回结构（queue + changedTasks）。"""
+    import asyncio
+    import time
+    import uuid
+    from pathlib import Path
+
+    from backend.ingest import cache as ingest_cache
+    from backend.ingest import queue as ingest_queue
+    from backend.ingest.sources import is_ingestable_source_path
+
+    sources_root = Path(project_path) / "raw" / "sources"
+    ingest_q = ingest_queue.get_queue(project_path)
+    now_ms = int(time.time() * 1000)
+    tasks: list[dict] = []
+    pending: list[str] = []
+    if sources_root.exists():
+        for entry in sorted(sources_root.rglob("*")):
+            if not entry.is_file():
+                continue
+            rel = entry.relative_to(Path(project_path)).as_posix()
+            if not is_ingestable_source_path(rel):
+                continue
+            content = entry.read_text(encoding="utf-8", errors="replace")
+            if ingest_cache.check_ingest_cache(project_path, rel, content) is not None:
+                continue
+            pending.append(rel)
+            st = entry.stat()
+            tasks.append(
+                {
+                    "id": uuid.uuid4().hex,
+                    "projectId": project_id,
+                    "path": rel,
+                    "kind": "created",
+                    "status": "pending",
+                    "hashBefore": None,
+                    "hashAfter": None,
+                    "size": st.st_size,
+                    "mtimeMs": int(st.st_mtime * 1000),
+                    "createdAt": now_ms,
+                    "updatedAt": now_ms,
+                    "retryCount": 0,
+                }
+            )
+    if pending:
+        loop = asyncio.get_event_loop()
+        loop.create_task(ingest_q.enqueue_batch(pending))
+    return {"queue": {"version": 0, "tasks": tasks}, "changedTasks": tasks}
+
+
 @command("start_project_file_watcher")
 def start_project_file_watcher(
     projectId: str = "", projectPath: str = "", sourceWatchConfig: dict | None = None
-) -> str:
+) -> dict:
     from backend.ingest.watch import start_project_file_watcher as start_watch
 
-    return start_watch(_watcher_project_path(projectId, projectPath))
+    path = _watcher_project_path(projectId, projectPath)
+    start_watch(path)
+    return _rescan_result(_project_id_for(projectId, path), path)
 
 
 @command("stop_project_file_watcher")
@@ -230,36 +298,12 @@ def stop_project_file_watcher(projectId: str = "", projectPath: str = "") -> str
 @command("rescan_project_files")
 def rescan_project_files(
     projectId: str = "", projectPath: str = "", sourceWatchConfig: dict | None = None
-) -> None:
-    """Scan raw/sources and enqueue any file not yet ingested
-    (cache-miss) — the deterministic rescan the API endpoint triggers.
-    projectId/sourceWatchConfig 为前端传入的附加参数，暂不参与扫描逻辑。"""
-    projectPath = _watcher_project_path(projectId, projectPath)
-    import asyncio
-
-    from pathlib import Path
-
-    from backend.ingest import cache as ingest_cache
-    from backend.ingest import queue as ingest_queue
-    from backend.ingest.sources import is_ingestable_source_path
-
-    sources_root = Path(projectPath) / "raw" / "sources"
-    queue = ingest_queue.get_queue(projectPath)
-    candidates = []
-    if sources_root.exists():
-        for entry in sorted(sources_root.rglob("*")):
-            if not entry.is_file():
-                continue
-            rel = entry.relative_to(Path(projectPath)).as_posix()
-            if not is_ingestable_source_path(rel):
-                continue
-            content = entry.read_text(encoding="utf-8", errors="replace")
-            if ingest_cache.check_ingest_cache(projectPath, rel, content) is None:
-                candidates.append(rel)
-    if candidates:
-        loop = asyncio.get_event_loop()
-        loop.create_task(queue.enqueue_batch(candidates))
-    return None
+) -> dict:
+    """Scan raw/sources and enqueue any file not yet ingested (cache-miss)。
+    返回与前端 FileChangeRescanResult 对齐的结构。
+    projectId/sourceWatchConfig 为前端传入的附加参数。"""
+    path = _watcher_project_path(projectId, projectPath)
+    return _rescan_result(_project_id_for(projectId, path), path)
 
 
 @command("get_file_change_queue")
