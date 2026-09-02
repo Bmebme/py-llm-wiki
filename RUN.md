@@ -115,3 +115,4 @@ curl http://127.0.0.1:19828/api/v1/health    # 后端健康检查
 | 前端起不来 | 确认 `frontend/node_modules` 已安装（`npm install`） |
 | 页面显示旧项目 | 注册表里有 `/tmp` 测试项目残留，在设置里新建/导入自己的项目 |
 | 后端报错 | 检查 `~/.py-llm-wiki/app-state.json` 的 llmConfig 是否有效 |
+| LLM 调用 504（WSL/公司网络） | 代理环境变量把 LLM 请求转发到公司代理所致。启动前 `export LLM_WIKI_NO_PROXY=1`（LLM 直连），或 `export NO_PROXY="api.deepseek.com,.deepseek.com,localhost,127.0.0.1"`（只对 LLM 域名绕过代理） |

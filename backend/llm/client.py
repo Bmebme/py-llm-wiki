@@ -29,6 +29,7 @@ import asyncio
 import codecs
 import contextlib
 import json
+import os
 import re
 from typing import Any, AsyncIterator, Callable, Optional
 
@@ -342,7 +343,12 @@ async def _check_http_response(response: httpx.Response, config: dict[str, Any])
 
 def _default_client() -> httpx.AsyncClient:
     # read=None: the long-horizon watchdog owns the read timeout.
-    return httpx.AsyncClient(timeout=httpx.Timeout(connect=10.0, read=None, write=30.0, pool=10.0))
+    # LLM_WIKI_NO_PROXY=1 时禁用系统代理（公司网络/代理环境下 LLM 直连，避免 504）
+    trust_env = os.environ.get("LLM_WIKI_NO_PROXY", "").strip().lower() not in ("1", "true", "yes")
+    return httpx.AsyncClient(
+        timeout=httpx.Timeout(connect=10.0, read=None, write=30.0, pool=10.0),
+        trust_env=trust_env,
+    )
 
 
 def _timeout_factory_for(minutes: int) -> Callable[[], RequestTimeout]:
