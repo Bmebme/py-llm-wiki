@@ -124,3 +124,36 @@ def test_read_queue_corrupt_file_returns_empty(tmp_path):
     qf.parent.mkdir(parents=True)
     qf.write_text("{not json", encoding="utf-8")
     assert fsq.read_queue(str(project)) == {"version": 0, "tasks": []}
+
+
+# --- agent_list_skills (misc_commands) ---
+
+
+def test_agent_list_skills_scans_and_prioritizes(tmp_path, monkeypatch):
+    from backend.commands import misc_commands
+
+    project = tmp_path / "proj"
+    (project / ".llm-wiki" / "skills" / "demo" / "SKILL.md").parent.mkdir(parents=True)
+    (project / ".llm-wiki" / "skills" / "demo" / "SKILL.md").write_text(
+        "---\nname: Demo Skill\ndescription: does demo\n---\n", encoding="utf-8"
+    )
+    # 用户级同名技能应被项目级覆盖
+    fake_home = tmp_path / "home"
+    (fake_home / ".claude" / "skills" / "demo" / "SKILL.md").parent.mkdir(parents=True)
+    (fake_home / ".claude" / "skills" / "demo" / "SKILL.md").write_text(
+        "---\nname: User Demo\n---\n", encoding="utf-8"
+    )
+    (fake_home / ".claude" / "skills" / "other" / "SKILL.md").parent.mkdir(parents=True)
+    (fake_home / ".claude" / "skills" / "other" / "SKILL.md").write_text(
+        "---\nname: Other\n---\n", encoding="utf-8"
+    )
+    monkeypatch.setattr("pathlib.Path.home", lambda: fake_home)
+
+    result = misc_commands.COMMANDS["agent_list_skills"](projectPath=str(project))
+
+    assert isinstance(result, list)
+    by_id = {s["id"]: s for s in result}
+    assert set(by_id) == {"demo", "other"}
+    assert by_id["demo"]["name"] == "Demo Skill"          # 项目级覆盖用户级
+    assert by_id["demo"]["source"] == "project"
+    assert by_id["other"]["source"] == "claude"

@@ -73,8 +73,71 @@ def codex_cli_detect() -> dict:
 
 
 @command("agent_list_skills")
-def agent_list_skills(projectPath: str) -> dict:
-    return {"skills": [], "projectSkillsDir": None, "userSkillsDir": None}
+def agent_list_skills(projectPath: str) -> list[dict]:
+    """扫描可用 Agent Skills，返回 [{id, name, description, source}] 数组。
+
+    目录优先级（高 → 低，id 相同者先占位）：
+      项目级: <project>/.llm-wiki/skills   (source: project)
+      用户级: ~/.claude/skills (claude) · ~/.codex/skills (codex) · ~/.agents/skills (agents)
+    每个技能是一个包含 SKILL.md 的子目录；name/description 取自 frontmatter。
+    """
+    import re
+    from pathlib import Path
+
+    roots: list[tuple[Path, str]] = []
+    if projectPath:
+        roots.append((Path(projectPath) / ".llm-wiki" / "skills", "project"))
+    home = Path.home()
+    for sub, src in ((".claude", "claude"), (".codex", "codex"), (".agents", "agents")):
+        roots.append((home / sub / "skills", src))
+
+    def _parse_frontmatter(text: str) -> tuple[str, str]:
+        name, description = "", ""
+        m = re.search(r"^name:\s*(.+)$", text, re.MULTILINE)
+        if m:
+            name = m.group(1).strip().strip("\"'")
+        # 处理 YAML 块标量（description: |- 后续缩进行拼接）与单行两种形态
+        m = re.search(r"^description:\s*([|>]-?)\s*$", text, re.MULTILINE)
+        if m:
+            body: list[str] = []
+            for line in text[m.end():].splitlines():
+                if not line.strip():
+                    continue
+                if line.startswith((" ", "\t")):
+                    body.append(line.strip())
+                else:
+                    break
+            description = " ".join(body)
+        else:
+            m = re.search(r"^description:\s*(.+)$", text, re.MULTILINE)
+            if m:
+                description = m.group(1).strip().strip("\"'")
+        return name, description
+
+    skills: dict[str, dict] = {}
+    for root, source in roots:
+        if not root.is_dir():
+            continue
+        for skill_dir in sorted(root.iterdir()):
+            if not skill_dir.is_dir():
+                continue
+            main = skill_dir / "SKILL.md"
+            if not main.is_file():
+                continue
+            try:
+                text = main.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            name, description = _parse_frontmatter(text)
+            slug = skill_dir.name
+            if slug not in skills:  # 优先级高者先占位，项目级覆盖用户级
+                skills[slug] = {
+                    "id": slug,
+                    "name": name or slug,
+                    "description": description or "",
+                    "source": source,
+                }
+    return list(skills.values())
 
 
 # --- search / embeddings / vector store (M2 / v1) --------------------------

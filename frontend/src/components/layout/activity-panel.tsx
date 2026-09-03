@@ -219,16 +219,20 @@ export function ActivityPanel() {
       .catch((err) => useFileSyncStore.getState().setLastError(String(err)))
   }, [project, setFileSyncTasks])
 
-  // Auto-expand when a new task starts running
+  // Auto-expand only on transitions: a new task starts running, or queue /
+  // file-sync content first appears. Level-triggering on every render would
+  // fight the user's collapse click (set false → effect sets true again).
+  const prevHasContentRef = useRef(false)
   useEffect(() => {
-    if (runningCount > 0 && prevRunningRef.current === 0) {
-      setExpanded(true)
-    }
-    if ((hasQueue || hasFileSync) && !expanded) {
+    const hasContent = hasQueue || hasFileSync
+    const becameRunning = runningCount > 0 && prevRunningRef.current === 0
+    const contentAppeared = hasContent && !prevHasContentRef.current
+    if (becameRunning || contentAppeared) {
       setExpanded(true)
     }
     prevRunningRef.current = runningCount
-  }, [runningCount, hasQueue, hasFileSync, expanded])
+    prevHasContentRef.current = hasContent
+  }, [runningCount, hasQueue, hasFileSync])
 
   if (!hasItems && !hasQueue && !hasFileSync) return null
 
