@@ -192,6 +192,7 @@ def build_generation_prompt(
             "",
             "Other rules:",
             "- Use [[wikilink]] syntax in the BODY for cross-references between pages",
+            "- Wikilink slugs MUST match the target page's filename slug EXACTLY: when you create a page, link to it with the same filename slug you assigned in this very response (no `.md`, no directory prefix); when linking to an existing page, copy its filename slug verbatim. Never translate, romanize, or rewrite a filename when writing [[…]] links — a page with a Chinese filename is linked with that Chinese slug, not an English translation of its title.",
             "- If you include images, use wiki-root-relative paths such as `media/source-slug/image.png`; never output absolute filesystem paths.",
             "- Preserve subject boundaries: when a source discusses multiple entities/models/products/methods, keep claims, evaluations, limitations, benchmark results, and recommendations attached to the exact subject they describe.",
             "- Do not merge or generalize a claim about one subject into another subject's page solely because they share terms (for example context window size, benchmark name, dataset, architecture, or feature name).",
