@@ -39,6 +39,8 @@ export function IconSidebar({ onSwitchProject }: IconSidebarProps) {
   const researchPanelOpen = useResearchStore((s) => s.panelOpen)
   const researchActiveCount = useResearchStore((s) => s.tasks.filter((t) => t.status !== "done" && t.status !== "error").length)
   const toggleResearchPanel = useResearchStore((s) => s.setPanelOpen)
+  // 浏览器移植版没有剪藏守护进程 —— 相关状态灯与健康检查整体跳过
+  const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window
   // Use `hasAvailableUpdate` (ignores dismiss state) rather than
   // `shouldShowUpdateBanner`. The dot is a passive signpost — it
   // should keep marking the gear as long as the update exists, even
@@ -51,6 +53,7 @@ export function IconSidebar({ onSwitchProject }: IconSidebarProps) {
   // Daemon health check
   const [daemonStatus, setDaemonStatus] = useState<string>("starting")
   useEffect(() => {
+    if (!isTauri) return
     const check = async () => {
       try {
         const { clipServerStatus } = await import("@/commands/fs")
@@ -142,7 +145,9 @@ export function IconSidebar({ onSwitchProject }: IconSidebarProps) {
         </div>
         {/* Bottom: daemon status + settings + switch project */}
         <div className="flex flex-col items-center gap-1 pb-1">
-          {/* Daemon status indicator */}
+          {/* Daemon status indicator — 浏览器移植版没有剪藏服务(19827),
+              状态灯只会永远报 error, 直接隐藏。 */}
+          {isTauri && (
           <Tooltip>
             <TooltipTrigger className="flex h-6 w-6 items-center justify-center">
               <span
@@ -161,6 +166,7 @@ export function IconSidebar({ onSwitchProject }: IconSidebarProps) {
               {daemonStatus === "error" && "Clip server error. Restarting..."}
             </TooltipContent>
           </Tooltip>
+          )}
           <Tooltip>
             <TooltipTrigger
               onClick={() => setActiveView("settings")}
