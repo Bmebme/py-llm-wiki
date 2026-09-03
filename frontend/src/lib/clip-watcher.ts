@@ -12,6 +12,9 @@ let intervalId: ReturnType<typeof setInterval> | null = null
  */
 export function startClipWatcher() {
   if (intervalId) return // Already running
+  // 浏览器移植版没有剪藏服务 (19827), 桌面版才有 —— 直接禁用轮询,
+  // 避免每 3 秒一次的 ERR_CONNECTION_REFUSED 刷屏。
+  if (typeof window !== "undefined" && !("__TAURI_INTERNALS__" in window)) return
 
   intervalId = setInterval(async () => {
     try {

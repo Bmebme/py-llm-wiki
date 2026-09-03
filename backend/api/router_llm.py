@@ -42,6 +42,9 @@ async def llm_proxy(request: Request):
     headers = {k: v for k, v in headers.items()} if isinstance(headers, dict) else {}
     for key in STRIPPED_REQUEST_HEADERS:
         headers.pop(key, None)
+    # GitHub 等上游要求 User-Agent, 前端 shim 不带时给个默认值
+    if "user-agent" not in {k.lower() for k in headers}:
+        headers["User-Agent"] = "py-llm-wiki/0.1"
 
     payload = body.get("body")
     if isinstance(payload, (dict, list)):
