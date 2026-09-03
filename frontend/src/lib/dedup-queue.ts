@@ -15,7 +15,7 @@
  * same retry-up-to-3 policy, same registry-based path resolution so
  * a relocated project still finds its tasks.
  */
-import { readFile, writeFile } from "@/commands/fs"
+import { fileExists, readFile, writeFile } from "@/commands/fs"
 import { useWikiStore } from "@/stores/wiki-store"
 import { normalizePath } from "@/lib/path-utils"
 import { getProjectPathById } from "@/lib/project-identity"
@@ -70,7 +70,11 @@ async function loadQueue(
   projectId: string,
 ): Promise<DedupTask[]> {
   try {
-    const raw = await readFile(queueFilePath(projectPath))
+    const qp = queueFilePath(projectPath)
+    // 文件不存在是首次启动的正常状态 —— 先查存在性, 避免 read_file
+    // 对缺失文件返回 400 造成控制台噪音。
+    if (!(await fileExists(qp))) return []
+    const raw = await readFile(qp)
     const tasks = JSON.parse(raw) as DedupTask[]
     return tasks.map((t) => ({
       ...t,

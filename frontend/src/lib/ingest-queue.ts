@@ -1,4 +1,4 @@
-import { readFile, writeFile } from "@/commands/fs"
+import { fileExists, readFile, writeFile } from "@/commands/fs"
 import { autoIngest } from "./ingest"
 import { normalizePath, isAbsolutePath } from "@/lib/path-utils"
 import { getProjectPathById } from "@/lib/project-identity"
@@ -139,7 +139,10 @@ async function drainActiveQueueWrites(): Promise<void> {
 
 async function loadQueue(projectPath: string, projectId: string): Promise<IngestTask[]> {
   try {
-    const raw = await readFile(queueFilePath(projectPath))
+    const qp = queueFilePath(projectPath)
+    // 首次启动无队列文件是正常状态 —— 先查存在性避免 read_file 400 噪音
+    if (!(await fileExists(qp))) return []
+    const raw = await readFile(qp)
     const tasks = JSON.parse(raw) as IngestTask[]
     // Backfill projectId for tasks persisted before the field existed.
     // Files live inside a specific project, so every task in this file
