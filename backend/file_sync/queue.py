@@ -101,11 +101,19 @@ def _active_key(task: dict) -> tuple:
 def _prune(queue: dict, now_ms: int) -> dict:
     tasks = queue.get("tasks", [])
     kept: list[dict] = []
-    for task in tasks:
+    seen_done: set = set()
+    # 倒序遍历（旧 → 新的追加顺序），done 历史中相同 (path, kind, mtimeMs)
+    # 只保留最新一条，避免同一未变化文件在每次扫描时积累重复记录。
+    for task in reversed(tasks):
         if task.get("status") == "done":
+            key = (task.get("path"), task.get("kind"), task.get("mtimeMs"))
+            if key in seen_done:
+                continue
+            seen_done.add(key)
             if now_ms - int(task.get("updatedAt") or 0) > DONE_TTL_MS:
                 continue
         kept.append(task)
+    kept.reverse()
     kept = kept[-MAX_TASKS:]
     return {"version": int(queue.get("version", 0)) + 1, "tasks": kept}
 
@@ -125,10 +133,19 @@ def merge_tasks(
         queue = read_queue(project_path)
         now_ms = int(time.time() * 1000)
         active = {_active_key(t) for t in queue.get("tasks", [])}
+        # 文件自上次扫描后未变化（mtime 相同）且已有 done 记录 → 跳过，
+        # 不再重复记账。
+        done_unchanged = {
+            (t.get("path"), t.get("kind"), t.get("mtimeMs"))
+            for t in queue.get("tasks", [])
+            if t.get("status") == "done"
+        }
         added: list[dict] = []
         for task in tasks:
             key = _active_key(task)
             if key in active:
+                continue
+            if (task.get("path"), task.get("kind"), task.get("mtimeMs")) in done_unchanged:
                 continue
             active.add(key)
             queue["tasks"].append(task)

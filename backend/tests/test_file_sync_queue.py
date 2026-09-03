@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import time
 
 from backend.file_sync import queue as fsq
 
@@ -66,6 +67,41 @@ def test_retry_resets_status_and_reenqueues(tmp_path):
     task = next(t for t in queue["tasks"] if t["id"] == task_id)
     assert task["status"] == "done"
     assert reenqueued == [["raw/sources/a.md"]]
+
+
+def test_merge_skips_unchanged_done_files(tmp_path):
+    """文件 mtime 未变化且已有 done 记录 → 下次扫描不重复记账。"""
+    project = str(tmp_path)
+    first = _task()
+    fsq.merge_tasks(project, "pid-1", [first])
+
+    # 同一 mtime 的文件再次扫描 → 跳过
+    queue, added = fsq.merge_tasks(project, "pid-1", [_task()])
+    assert added == []
+    assert len(queue["tasks"]) == 1
+
+    # 文件真的变了（mtime 不同）→ 正常新增
+    changed = _task()
+    changed["mtimeMs"] = 2000
+    queue, added = fsq.merge_tasks(project, "pid-1", [changed])
+    assert len(added) == 1
+    assert len(queue["tasks"]) == 2
+
+
+def test_prune_dedupes_duplicate_done_history(tmp_path):
+    """同一文件同 mtime 的多条 done 历史 → 只保留最新一条。"""
+    project = str(tmp_path)
+    for _ in range(3):
+        fsq.merge_tasks(project, "pid-1", [_task()])
+    # 手动塞入重复 done 历史（模拟旧版本留下的脏数据）
+    with fsq._lock(project):
+        queue = fsq.read_queue(project)
+        dup = dict(queue["tasks"][-1])
+        dup["id"] = "dup-id"
+        queue["tasks"].append(dup)
+        fsq.write_queue(project, queue)
+        pruned = fsq._prune(queue, int(time.time() * 1000))
+    assert len(pruned["tasks"]) == 1
 
 
 def test_ignore_removes_task(tmp_path):
