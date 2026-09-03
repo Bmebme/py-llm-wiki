@@ -9,6 +9,8 @@ value becomes {ok: true, value: <result>} unless it already contains
 
 from __future__ import annotations
 
+import inspect
+
 from fastapi import APIRouter, Request
 
 from backend import commands, config
@@ -30,6 +32,8 @@ async def tauri_invoke(request: Request) -> dict:
     args = args if isinstance(args, dict) else {}
     try:
         result = handler(**args)
+        if inspect.isawaitable(result):
+            result = await result
     except NotImplementedError as exc:
         raise err(501, str(exc) or "Not implemented") from exc
     except TypeError as exc:
