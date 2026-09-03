@@ -8,6 +8,7 @@ vi.mock("./dedup-runner", () => ({
 vi.mock("@/commands/fs", () => ({
   readFile: vi.fn(),
   writeFile: vi.fn(),
+  fileExists: vi.fn(async () => true),
 }))
 
 const TEST_ID = "test-project-uuid"

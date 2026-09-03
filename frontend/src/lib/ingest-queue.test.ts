@@ -12,6 +12,7 @@ vi.mock("@/commands/fs", () => ({
   writeFile: vi.fn(),
   listDirectory: vi.fn(),
   deleteFile: vi.fn(),
+  fileExists: vi.fn(async () => true),
 }))
 
 // Mock sweep-reviews since the queue drain dynamically imports it. The
