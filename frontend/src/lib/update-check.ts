@@ -98,9 +98,14 @@ export function isNewer(remote: string, local: string): boolean {
  * webview's CORS policy for api.github.com (which is permissive today
  * but might not always be).
  */
+export type FetchReleaseResult =
+  | { status: "ok"; release: GithubRelease }
+  | { status: "not-found" }
+  | { status: "error" }
+
 export async function fetchLatestRelease(
   repo: string,
-): Promise<GithubRelease | null> {
+): Promise<FetchReleaseResult> {
   const url = `https://api.github.com/repos/${repo}/releases/latest`
   try {
     const httpFetch = await getHttpFetch()
@@ -111,7 +116,9 @@ export async function fetchLatestRelease(
         "X-GitHub-Api-Version": "2022-11-28",
       },
     })
-    if (!resp.ok) return null
+    // 404 = 该仓库还没有发布任何 release → 视为"无更新"而非错误
+    if (resp.status === 404) return { status: "not-found" }
+    if (!resp.ok) return { status: "error" }
     const data = await resp.json()
     // Duck-type the response shape — GitHub occasionally adds fields
     // but the ones below have been stable since the API's v3 days.
@@ -120,18 +127,21 @@ export async function fetchLatestRelease(
       typeof data?.html_url === "string"
     ) {
       return {
-        tag_name: data.tag_name,
-        name: typeof data.name === "string" ? data.name : data.tag_name,
-        body: typeof data.body === "string" ? data.body : "",
-        html_url: data.html_url,
-        published_at:
-          typeof data.published_at === "string" ? data.published_at : "",
+        status: "ok",
+        release: {
+          tag_name: data.tag_name,
+          name: typeof data.name === "string" ? data.name : data.tag_name,
+          body: typeof data.body === "string" ? data.body : "",
+          html_url: data.html_url,
+          published_at:
+            typeof data.published_at === "string" ? data.published_at : "",
+        },
       }
     }
-    return null
+    return { status: "error" }
   } catch (err) {
-    if (isFetchNetworkError(err)) return null
-    return null
+    if (isFetchNetworkError(err)) return { status: "error" }
+    return { status: "error" }
   }
 }
 
@@ -144,16 +154,25 @@ export async function fetchLatestRelease(
 export async function checkForUpdates(opts: {
   currentVersion: string
   repo: string
+  /** 测试注入点: 覆盖真实网络请求 */
+  fetchRelease?: () => Promise<FetchReleaseResult>
 }): Promise<UpdateStatus> {
   const { currentVersion, repo } = opts
-  const release = await fetchLatestRelease(repo)
-  if (!release) {
+  const fetched = opts.fetchRelease
+    ? await opts.fetchRelease()
+    : await fetchLatestRelease(repo)
+  if (fetched.status === "error") {
     return {
       kind: "error",
       local: currentVersion,
       message: "Could not reach GitHub Releases API.",
     }
   }
+  if (fetched.status === "not-found") {
+    // 仓库还没有任何 release —— 视为无更新, 不显示错误
+    return { kind: "up-to-date", local: currentVersion, remote: currentVersion }
+  }
+  const release = fetched.release
   const remote = release.tag_name
   if (isNewer(remote, currentVersion)) {
     return {

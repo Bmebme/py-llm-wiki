@@ -120,3 +120,44 @@ describe("toLatestReleaseUrl — canonical /releases/latest mapping", () => {
     )
   })
 })
+
+describe("checkForUpdates — fetch layer results", () => {
+  it("not-found (no releases) is up-to-date, not an error", async () => {
+    const { checkForUpdates } = await import("./update-check")
+    const result = await checkForUpdates({
+      currentVersion: "0.1.0",
+      repo: "x/y",
+      fetchRelease: async () => ({ status: "not-found" }),
+    })
+    expect(result.kind).toBe("up-to-date")
+  })
+
+  it("error from fetch layer surfaces as error status", async () => {
+    const { checkForUpdates } = await import("./update-check")
+    const result = await checkForUpdates({
+      currentVersion: "0.1.0",
+      repo: "x/y",
+      fetchRelease: async () => ({ status: "error" }),
+    })
+    expect(result.kind).toBe("error")
+  })
+
+  it("ok release newer than local is available", async () => {
+    const { checkForUpdates } = await import("./update-check")
+    const result = await checkForUpdates({
+      currentVersion: "0.1.0",
+      repo: "x/y",
+      fetchRelease: async () => ({
+        status: "ok",
+        release: {
+          tag_name: "v0.2.0",
+          name: "v0.2.0",
+          body: "",
+          html_url: "https://github.com/x/y/releases",
+          published_at: "",
+        },
+      }),
+    })
+    expect(result.kind).toBe("available")
+  })
+})
