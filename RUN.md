@@ -141,3 +141,46 @@ manylinux x86_64 版本。构建时:
 FROM <内网registry>/python:3.12-slim
 ENV PIP_INDEX_URL=http://<内网pip源>/simple
 ```
+
+## Docker 启动 (内网部署, 直接复制执行)
+
+```bash
+# 1. 构建 (Dockerfile 的 FROM/ENV 两处可改指内源, 见上文内源清单)
+git clone <git地址>/py-llm-wiki && cd py-llm-wiki
+docker build -t py-llm-wiki .
+
+# 2. 数据目录 (状态卷) + 项目目录准备
+mkdir -p /opt/py-llm-wiki/data
+
+# 3. 首次启动前: 项目注册 + 开放免认证 (容器 HOST=0.0.0.0 默认 fail-closed)
+cat > /opt/py-llm-wiki/data/app-state.json <<'JSONEOF'
+{
+  "lastProject": "/projects/mae",
+  "projectRegistry": {
+    "current": {"name": "mae", "path": "/projects/mae"}
+  },
+  "apiConfig": {"allowUnauthenticated": true, "allowLanAccess": true}
+}
+JSONEOF
+# "current" 是项目在 llm-wiki 里的 id (与项目目录 .llm-wiki/project.json 一致)
+
+# 4. 启动 (宿主机项目目录挂到 /projects: <项目根>/mae → 容器内 /projects/mae)
+docker run -d --name llm-wiki --restart unless-stopped \
+  -p 19828:19828 \
+  -v /opt/py-llm-wiki/data:/data \
+  -v <项目根目录>:/projects \
+  -e LLM_WIKI_LLM_BASE=<内网LLM地址>/v1 \
+  -e LLM_WIKI_LLM_API_KEY=<内网LLM key> \
+  -e LLM_WIKI_LLM_MODEL=<模型名> \
+  py-llm-wiki
+
+# 5. 验证
+curl http://localhost:19828/health
+curl -X POST http://localhost:19828/api/v1/projects/current/search \
+  -H 'Content-Type: application/json' -d '{"query":"hiro 总线","limit":3}'
+```
+
+要点:
+- `LLM_WIKI_LLM_*` 三个环境变量在启动时自动覆盖 app-state 的 llmConfig
+- 免认证开关是 `apiConfig.allowUnauthenticated` (仅在内网可信网络开放)
+- 项目路径在容器内是 `/projects/<目录名>`, 与宿主机路径无关
