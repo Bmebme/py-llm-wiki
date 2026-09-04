@@ -181,6 +181,8 @@ curl -X POST http://localhost:19828/api/v1/projects/current/search \
 ```
 
 要点:
+- **前端与 API 同端口 19828**: 全栈镜像内 daemon 托管 UI (frontend/dist),
+  浏览器开 `http://<host>:19828` 即界面, 无需单独端口映射
 - `LLM_WIKI_LLM_*` 三个环境变量在启动时自动覆盖 app-state 的 llmConfig
 - 免认证开关是 `apiConfig.allowUnauthenticated` (仅在内网可信网络开放)
 - 项目路径在容器内是 `/projects/<目录名>`, 与宿主机路径无关
