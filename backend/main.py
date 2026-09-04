@@ -159,7 +159,7 @@ from pathlib import Path as _Path
 
 from fastapi.staticfiles import StaticFiles as _StaticFiles
 
-_ui_dist = _Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
+_ui_dist = _Path(__file__).resolve().parent.parent / "frontend" / "dist"
 if _ui_dist.exists():
     app.mount("/", _StaticFiles(directory=str(_ui_dist), html=True), name="ui")
 
