@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Any
 
 # --- Network ---
 PORT: int = int(os.environ.get("PY_LLM_WIKI_PORT", "19828"))
@@ -38,3 +39,24 @@ APP_STATE_FILE = DATA_DIR / "app-state.json"
 def ensure_data_dir() -> Path:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     return DATA_DIR
+
+
+def env_llm_override() -> dict[str, Any] | None:
+    """统一 LLM 约定 (crucible deploy/.env): LLM_WIKI_LLM_* 覆盖 llmConfig。
+
+    容器化部署时由环境注入 LLM 配置, 免手工改 app-state.json。
+    任一变量未设置则返回 None (不覆盖)。
+    """
+    base = os.environ.get("LLM_WIKI_LLM_BASE")
+    key = os.environ.get("LLM_WIKI_LLM_API_KEY")
+    model = os.environ.get("LLM_WIKI_LLM_MODEL")
+    if not any((base, key, model)):
+        return None
+    override: dict[str, Any] = {"provider": "custom", "apiMode": "chat_completions"}
+    if base:
+        override["customEndpoint"] = base
+    if key:
+        override["apiKey"] = key
+    if model:
+        override["model"] = model
+    return override

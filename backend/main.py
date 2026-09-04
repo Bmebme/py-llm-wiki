@@ -33,6 +33,14 @@ from backend.ingest import queue as ingest_queue
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     config.ensure_data_dir()
+    # 统一 LLM 约定: 环境变量覆盖 llmConfig (容器化部署注入, 免改 app-state)
+    llm_override = config.env_llm_override()
+    if llm_override:
+        state0 = settings_store.load() or {}
+        llm_cfg = dict(state0.get("llmConfig") or {})
+        llm_cfg.update(llm_override)
+        state0["llmConfig"] = llm_cfg
+        settings_store.save(state0)
     # Restore the last-opened project as "current" (mirrors the desktop
     # app reopening lastProject at launch).
     state = settings_store.load() or {}

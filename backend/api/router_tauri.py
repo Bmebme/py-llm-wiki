@@ -10,11 +10,14 @@ value becomes {ok: true, value: <result>} unless it already contains
 from __future__ import annotations
 
 import inspect
+import logging
 
 from fastapi import APIRouter, Request
 
 from backend import commands, config
 from backend.api.router_v1 import err, ok
+
+_tauri_log = logging.getLogger("uvicorn.error")
 
 router = APIRouter(prefix=config.API_PREFIX)
 
@@ -27,6 +30,7 @@ async def tauri_invoke(request: Request) -> dict:
         raise err(400, "Missing command")
     handler = commands.COMMANDS.get(command_name)
     if handler is None:
+        _tauri_log.info("tauri_invoke 400 unknown_command=%s", command_name)
         raise err(400, f"Unknown command: {command_name}")
     args = body.get("args")
     args = args if isinstance(args, dict) else {}
@@ -37,11 +41,16 @@ async def tauri_invoke(request: Request) -> dict:
     except NotImplementedError as exc:
         raise err(501, str(exc) or "Not implemented") from exc
     except TypeError as exc:
+        _tauri_log.info(
+            "tauri_invoke 400 bad_args command=%s arg_keys=%s err=%s",
+            command_name, list(args.keys()) if isinstance(args, dict) else args, exc,
+        )
         raise err(400, f"Invalid arguments for {command_name}: {exc}") from exc
     except Exception as exc:
         from backend.core.file_service import FsError
 
         if isinstance(exc, FsError):
+            _tauri_log.info("tauri_invoke 400 fserror command=%s err=%s", command_name, exc)
             raise err(400, str(exc)) from exc
         raise
     return ok({"value": result})
