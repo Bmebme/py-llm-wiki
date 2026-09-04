@@ -165,6 +165,7 @@ JSONEOF
 # "current" 是项目在 llm-wiki 里的 id (与项目目录 .llm-wiki/project.json 一致)
 
 # 4. 启动 (宿主机项目目录挂到 /projects: <项目根>/mae → 容器内 /projects/mae)
+# Linux/macOS:
 docker run -d --name llm-wiki --restart unless-stopped \
   -p 19828:19828 \
   -v /opt/py-llm-wiki/data:/data \
@@ -173,6 +174,9 @@ docker run -d --name llm-wiki --restart unless-stopped \
   -e LLM_WIKI_LLM_API_KEY=<内网LLM key> \
   -e LLM_WIKI_LLM_MODEL=<模型名> \
   py-llm-wiki
+
+# Windows (PowerShell/cmd, 单行 —— 注意不能用 \ 续行):
+docker run -d --name llm-wiki --restart unless-stopped -p 19828:19828 -v C:\data\py-llm-wiki:/data -v D:\projects:/projects -e LLM_WIKI_LLM_BASE=http://<内网LLM地址>/v1 -e LLM_WIKI_LLM_API_KEY=<key> -e LLM_WIKI_LLM_MODEL=<模型名> py-llm-wiki
 
 # 5. 验证
 curl http://localhost:19828/health
