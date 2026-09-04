@@ -116,3 +116,28 @@ curl http://127.0.0.1:19828/api/v1/health    # 后端健康检查
 | 页面显示旧项目 | 注册表里有 `/tmp` 测试项目残留，在设置里新建/导入自己的项目 |
 | 后端报错 | 检查 `~/.py-llm-wiki/app-state.json` 的 llmConfig 是否有效 |
 | LLM 调用 504（WSL/公司网络） | 代理环境变量把 LLM 请求转发到公司代理所致。启动前 `export LLM_WIKI_NO_PROXY=1`（LLM 直连），或 `export NO_PROXY="api.deepseek.com,.deepseek.com,localhost,127.0.0.1"`（只对 LLM 域名绕过代理） |
+
+## 容器化部署的内源清单
+
+Dockerfile 构建只下载两类东西 (无 apt 阶段):
+
+1. 基础镜像 `python:3.12-slim` (Docker Hub → 内网 registry 代理)
+2. pip 包 (linux/amd64 轮子, 内网 PyPI 源按此清单缓存):
+
+```
+fastapi 0.141.1 / starlette 1.6.0 / annotated-doc / typing-inspection
+uvicorn[standard] 0.52.4 / httptools 0.8.0 / watchfiles 1.2.0 /
+  websockets 17.1 / python-dotenv 1.2.3 / uvloop 0.22.1 / click 8.5.0
+httpx 0.28.1 / httpcore 1.0.9 / h11 / certifi / idna / anyio
+pydantic 2.13.5 / pydantic_core 2.46.5 (Rust) / annotated-types / typing_extensions
+pypdfium2 5.13.0 (C) / python-docx 1.2.0 / lxml 6.1.3 (C)
+python-multipart / PyYAML / watchdog
+```
+
+平台相关轮子 (pydantic_core/lxml/httptools/uvloop/pypdfium2) 必须缓存
+manylinux x86_64 版本。构建时:
+
+```dockerfile
+FROM <内网registry>/python:3.12-slim
+ENV PIP_INDEX_URL=http://<内网pip源>/simple
+```
