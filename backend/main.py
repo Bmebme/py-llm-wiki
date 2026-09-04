@@ -153,6 +153,16 @@ app.include_router(router_tauri.router)
 app.include_router(router_llm.router)
 app.include_router(router_ingest.router)
 
+# 浏览器版 UI (Dockerfile 多阶段构建产物): 存在则同源托管
+# API 路由注册在前, 不会被静态挂载遮蔽
+from pathlib import Path as _Path
+
+from fastapi.staticfiles import StaticFiles as _StaticFiles
+
+_ui_dist = _Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
+if _ui_dist.exists():
+    app.mount("/", _StaticFiles(directory=str(_ui_dist), html=True), name="ui")
+
 
 if __name__ == "__main__":
     import uvicorn
