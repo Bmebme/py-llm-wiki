@@ -20,7 +20,7 @@ from backend import config
 router = APIRouter(prefix=config.API_PREFIX)
 
 MAX_PROXY_BODY = 10 * 1024 * 1024
-PROXY_TIMEOUT = httpx.Timeout(connect=10.0, read=1800.0, write=30.0, pool=10.0)
+PROXY_TIMEOUT = httpx.Timeout(connect=30.0, read=1800.0, write=30.0, pool=30.0)
 STRIPPED_REQUEST_HEADERS = {"origin", "host", "content-length", "connection", "accept-encoding"}
 
 
