@@ -63,7 +63,10 @@ def list_projects() -> list[dict]:
             pid, project_core.project_name_from_path(current), current, True
         )
 
-    return sorted(by_path.values(), key=lambda p: p["name"].lower())
+    # 过滤路径已不存在的死项目 (目录被删后 registry 残留会导致
+    # open 报 "Path does not exist", 且 UI 仍展示无法打开的条目)
+    alive = {path: entry for path, entry in by_path.items() if Path(path).exists()}
+    return sorted(alive.values(), key=lambda p: p["name"].lower())
 
 
 def _entry(pid: str, name: str, path: str, current: bool) -> dict:
