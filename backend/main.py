@@ -29,6 +29,15 @@ from backend.core import project_registry, settings_store
 from backend.ingest import pipeline as ingest_pipeline
 from backend.ingest import queue as ingest_queue
 
+# 日志带时间戳 (uvicorn 默认格式无时间, 排障无法对时间线)
+import logging as _logging
+
+_logging.basicConfig(
+    level=_logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -172,4 +181,5 @@ if __name__ == "__main__":
         host=config.HOST,
         port=config.PORT,
         log_level="info",
+        log_config=None,
     )
