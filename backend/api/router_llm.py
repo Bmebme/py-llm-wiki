@@ -61,10 +61,25 @@ async def llm_proxy(request: Request):
         )
 
     client = httpx.AsyncClient(timeout=PROXY_TIMEOUT)
-    upstream = await client.send(
-        httpx.Request(method=method, url=url, headers=headers, content=payload),
-        stream=True,
-    )
+    try:
+        upstream = await client.send(
+            httpx.Request(method=method, url=url, headers=headers, content=payload),
+            stream=True,
+        )
+    except httpx.HTTPError as exc:
+        # 上游 LLM 不可达/超时: 返回干净的 502 而非 ASGI 崩溃
+        # (此前未捕获, 连接失败直接抛到中间件, 报 exception in ASGI application)
+        await client.aclose()
+        import json as _json
+
+        return Response(
+            status_code=502,
+            content=_json.dumps(
+                {"ok": False, "error": f"LLM 上游不可达: {type(exc).__name__}: {exc}"},
+                ensure_ascii=False,
+            ),
+            media_type="application/json",
+        )
     upstream_headers = {
         k: v for k, v in upstream.headers.items() if k.lower() in ("content-type",)
     }
