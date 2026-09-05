@@ -111,9 +111,14 @@ def search_project_inner(
     graph_pages: dict[str, GraphPage] = {}
 
     wiki_root = Path(project_path) / "wiki"
-    if wiki_root.exists():
+    # crucible 统一源约定: MinerU 标准化 md 放 raw/sources (文件树公开根),
+    # 搜索同样覆盖 —— 两个引擎 (RAG/wiki) 消费同一输入源, 全文不失检索
+    sources_root = Path(project_path) / "raw" / "sources"
+    for search_root in (wiki_root, sources_root):
+        if not search_root.exists():
+            continue
         searched_files = 0
-        for entry in sorted(wiki_root.rglob("*.md")):
+        for entry in sorted(search_root.rglob("*.md")):
             if not entry.is_file():
                 continue
             searched_files += 1
