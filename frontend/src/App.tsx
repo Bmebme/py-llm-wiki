@@ -413,8 +413,16 @@ function App() {
         const lastProject = await getLastProject()
         if (lastProject) {
           try {
-            const proj = await openProject(lastProject.path)
-            await handleProjectOpened(proj)
+            // 状态兼容: 后端/旧版会把 lastProject 存成字符串路径,
+            // 对象形态才有 .path —— 取不到路径时跳过静默恢复,
+            // 否则 invoke(open_project) 参数被 JSON 丢弃 → 后端
+            // "missing 1 required positional argument path" (内网实调)
+            const raw = lastProject as unknown
+            const p = typeof raw === "string" ? raw : (raw as { path?: string })?.path
+            if (p) {
+              const proj = await openProject(p)
+              await handleProjectOpened(proj)
+            }
           } catch {
             // Last project no longer valid
           }
