@@ -102,10 +102,9 @@ function uniqueDestName(index: number, sourcePath: string): string {
 async function sha256OfFile(path: string): Promise<string> {
   const bytes = await readFileAsBase64(path)
   const raw = Uint8Array.from(atob(bytes.base64), (c) => c.charCodeAt(0))
-  const digest = await crypto.subtle.digest("SHA-256", raw)
-  return Array.from(new Uint8Array(digest))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("")
+  const { sha256Bytes } = await import("./hash")
+  const digest = await sha256Bytes(raw)
+  return digest
 }
 
 export function findLocalMarkdownImageRefs(markdown: string): string[] {

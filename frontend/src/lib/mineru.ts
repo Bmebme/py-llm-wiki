@@ -181,10 +181,9 @@ function bytesToBase64(bytes: Uint8Array): string {
 }
 
 async function sha256OfBytes(bytes: Uint8Array): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", bytesToUploadBody(bytes))
-  return Array.from(new Uint8Array(digest))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("")
+  const { sha256Bytes } = await import("./hash")
+  const digest = await sha256Bytes(bytesToUploadBody(bytes))
+  return digest
 }
 
 function mineruImageMimeType(path: string): string {

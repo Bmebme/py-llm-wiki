@@ -170,11 +170,9 @@ async function sha256OfBase64(b64: string): Promise<string> {
   const binary = atob(b64)
   const bytes = new Uint8Array(binary.length)
   for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i)
-  const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
-  const digest = await crypto.subtle.digest("SHA-256", buffer)
-  return Array.from(new Uint8Array(digest))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("")
+  const { sha256Bytes } = await import("./hash")
+  const digest = await sha256Bytes(bytes)
+  return digest
 }
 
 async function savedImagesFromMineruMarkdown(
