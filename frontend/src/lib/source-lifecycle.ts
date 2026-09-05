@@ -278,7 +278,15 @@ export async function enqueueSourceIngest(
   if (files.length === 0) return []
   const parsingConcurrency = options.parsingConcurrency
     ?? normalizeSourceWatchConfig(useWikiStore.getState().sourceWatchConfig).parsingConcurrency
-  await preprocessSourceFiles(files.map((file) => file.sourcePath), parsingConcurrency)
+  // preprocess_file 后端要求绝对路径 (FsError: Path must be absolute);
+  // 队列与缓存 identity 仍用相对路径, 只对预处理调用做绝对化
+  const projectRoot = normalizePath(project.path)
+  const toAbsolute = (p: string) => {
+    const n = normalizePath(p)
+    if (n.startsWith("/") || /^[A-Za-z]:[\\/]/.test(n)) return n
+    return `${projectRoot}/${n}`
+  }
+  await preprocessSourceFiles(files.map((file) => toAbsolute(file.sourcePath)), parsingConcurrency)
   return enqueueBatch(project.id, files)
 }
 
