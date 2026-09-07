@@ -129,12 +129,18 @@ def score_file(
     ):
         return None
 
+    # 长度归一化: 巨型文档 (嵌入全文的源摘要页) 靠出现次数霸榜,
+    # 任何查询都压过精确小页 (内网实调: 每次搜到同一份文档)。
+    # 内容侧得分除以 1+log(len), 标题侧不归一 (标题天然短)。
+    import math as _math
+
+    _length_norm = 1.0 / (1.0 + _math.log(max(len(content), 1)))
     score = (
         (FILENAME_EXACT_BONUS if filename_exact else 0.0)
         + (PHRASE_IN_TITLE_BONUS if title_has_phrase else 0.0)
-        + content_phrase_occ * PHRASE_IN_CONTENT_PER_OCC
+        + content_phrase_occ * PHRASE_IN_CONTENT_PER_OCC * _length_norm
         + title_token_score * TITLE_TOKEN_WEIGHT
-        + content_token_score * CONTENT_TOKEN_WEIGHT
+        + content_token_score * CONTENT_TOKEN_WEIGHT * _length_norm
     )
 
     snippet_anchor = (
