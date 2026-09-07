@@ -1,0 +1,12 @@
+# py-llm-wiki 应用薄层: 后端/前端代码变更只重打这一层, 内网秒级构建
+# 前提: 已 docker load 基础镜像 (摆渡 tar 内含 py-llm-wiki:amd64):
+#   docker load -i py-llm-wiki-amd64.tar
+# 构建 (py-llm-wiki 仓库根, 代码经 GitHub 同步):
+#   docker build -f Dockerfile.thin -t py-llm-wiki:amd64 .
+# 注意: frontend/dist 构建产物已入 git (内网无 npm registry, 前端
+# 更新的唯一通道); 依赖变化才需要重打基础镜像 (Dockerfile)
+FROM py-llm-wiki:amd64
+
+WORKDIR /srv
+COPY backend ./backend
+COPY frontend/dist ./frontend/dist

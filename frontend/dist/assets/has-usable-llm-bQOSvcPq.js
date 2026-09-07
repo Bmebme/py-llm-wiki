@@ -1,0 +1,1 @@
+var e=new Set([`ollama`,`custom`,`claude-code`,`codex-cli`]);function t(t){return e.has(t.provider)?!0:(t.apiKey??``).trim().length>0}export{t};

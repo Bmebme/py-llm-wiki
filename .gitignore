@@ -9,3 +9,6 @@ dist/
 build/
 perm-test.txt
 *.log
+
+# 前端构建产物入 git: 内网无 npm registry, git pull + 薄层构建是前端更新的唯一通道
+!frontend/dist/

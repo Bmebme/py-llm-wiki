@@ -1,0 +1,3 @@
+function e(e){let t=e.trim().replace(/\\/g,`/`),n=t.split(`/`).pop()??t;return(n.toLowerCase().endsWith(`.md`)?n.slice(0,-3):n).toLowerCase().replace(/[\s\-_]+/g,``)}function t(t){let n=new Set;for(let r of t)r.slug&&n.add(e(r.slug)),r.title&&n.add(e(r.title));return n}function n(e){let t=e.match(/^title:\s*["']?(.+?)["']?\s*$/m);return t?t[1].trim():``}var r=/^\s*[-*]\s*\[\[([^\]|]+?)(?:\|[^\]]+)?\]\]/;function i(t,n){return n.size===0?t:t.split(`
+`).filter(t=>{let i=t.match(r);return!i||!n.has(e(i[1].trim()))}).join(`
+`)}var a=/\[\[([^\]|]+?)(?:\|([^\]]+))?\]\]/g;function o(t,n){return n.size===0?t:t.replace(a,(t,r,i)=>{let a=e(r.trim());return n.has(a)?i??r:t})}export{o as a,e as i,i as n,n as r,t};
