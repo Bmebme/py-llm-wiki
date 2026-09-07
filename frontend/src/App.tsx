@@ -410,8 +410,28 @@ function App() {
         if (savedLang) {
           await i18n.changeLanguage(savedLang)
         }
+        // ?project=<id> 深链: crucible 跳转 llm-wiki 用 (id → path → open),
+        // 优先于 lastProject 恢复 (内网实调需求)
+        const urlProjectId = new URLSearchParams(window.location.search).get("project")
+        let openedByLink = false
+        if (urlProjectId) {
+          try {
+            const res = await fetch("/api/v1/projects")
+            const data = await res.json()
+            const found: any = (data?.projects ?? []).find(
+              (p: { id?: string }) => p.id === urlProjectId,
+            )
+            if (found?.path) {
+              const proj = await openProject(found.path)
+              await handleProjectOpened(proj)
+              openedByLink = true
+            }
+          } catch {
+            // 深链失败不影响默认恢复
+          }
+        }
         const lastProject = await getLastProject()
-        if (lastProject) {
+        if (!openedByLink && lastProject) {
           try {
             // 状态兼容: 后端/旧版会把 lastProject 存成字符串路径,
             // 对象形态才有 .path —— 取不到路径时跳过静默恢复,
