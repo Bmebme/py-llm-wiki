@@ -116,6 +116,10 @@ def search_project_inner(
         for entry in sorted(wiki_root.rglob("*.md")):
             if not entry.is_file():
                 continue
+            # 源摘要页 (wiki/sources/) 是 ingest 中间产物: 全文覆盖极大,
+            # 任何查询都霸榜第一, 挤占真实知识页 (内网实调) → 检索排除
+            if relative_to_project(project_path, entry).startswith("wiki/sources/"):
+                continue
             searched_files += 1
             if searched_files > MAX_SEARCH_FILES:
                 break
