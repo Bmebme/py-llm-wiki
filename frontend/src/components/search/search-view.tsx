@@ -83,7 +83,7 @@ export function SearchView() {
     const seen = new Set<string>()
     const out: ImageHit[] = []
     for (const r of results) {
-      for (const img of r.images) {
+      for (const img of r.images ?? []) {
         if (seen.has(img.url)) continue
         seen.add(img.url)
         const altLower = img.alt.toLowerCase()
