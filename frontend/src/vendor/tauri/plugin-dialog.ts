@@ -41,8 +41,20 @@ export async function open(
   options?: OpenDialogOptions & { multiple?: false },
 ): Promise<string | null>
 export async function open(
-  _options?: OpenDialogOptions,
+  options?: OpenDialogOptions,
 ): Promise<string | string[] | null> {
+  // 浏览器无原生目录选择器: directory 模式降级为路径输入框,
+  // 否则"打开项目"按钮因 open() 恒返 null 而无反应 (内网实调)。
+  if (options?.directory) {
+    const title = options.title ?? "打开项目"
+    const value = window.prompt(
+      `${title}: 请输入项目路径 (容器视角绝对路径, 如 /projects/mae)`,
+      options.defaultPath ?? "",
+    )
+    if (!value || !value.trim()) return null
+    return options.multiple ? [value.trim()] : value.trim()
+  }
+  // 文件选择器: M4 由 <input type="file"> 流程替换, 暂返回 null
   return null
 }
 
