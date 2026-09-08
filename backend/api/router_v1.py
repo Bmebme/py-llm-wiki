@@ -238,8 +238,13 @@ async def handle_search(request: Request, project_id: str) -> dict:
     from backend.search.engine import search_project_inner
 
     try:
-        response = search_project_inner(
-            project["path"], query, top_k, include_content, query_embedding
+        # 搜索是同步文件 IO (rglob + 逐页 read_text), 直接调用会阻塞
+        # 事件循环 → 并发搜索互相卡 (内网实调: 多用户并发场景)
+        import asyncio
+
+        response = await asyncio.to_thread(
+            search_project_inner,
+            project["path"], query, top_k, include_content, query_embedding,
         )
     except ValueError as exc:
         raise err(400, str(exc)) from exc
