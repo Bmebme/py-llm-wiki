@@ -4,6 +4,7 @@ score_file (814-879), build_snippet (1600-1624), extract_title
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from backend.search.tokenize import (
@@ -71,9 +72,22 @@ def extract_image_refs(content: str) -> list[dict]:
     return out
 
 
+_FRONTMATTER_RE = re.compile(r"\A---\s*\n.*?\n---\s*\n", re.DOTALL)
+
+
+def strip_frontmatter(content: str) -> str:
+    """去掉页首 YAML frontmatter —— 摘要/引用应是正文, 不应包含元数据
+    (内网实调: 查询命中 frontmatter 时摘要以 "--- type: source title:"
+    开头, 且截断处没有闭合 ---, 下游无法再剥)。"""
+    if content.startswith("---"):
+        return _FRONTMATTER_RE.sub("", content, count=1)
+    return content
+
+
 def build_snippet(content: str, query: str) -> str:
     """Port of build_snippet: ~80 chars of context around the first
     match, newlines collapsed, ellipses on the cut edges."""
+    content = strip_frontmatter(content)
     lower = content.lower()
     q = query.lower()
     idx = lower.find(q) if q else -1
