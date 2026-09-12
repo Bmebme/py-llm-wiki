@@ -74,11 +74,17 @@ class TestScoreFile:
         assert result["score"] >= 50.0
 
     def test_content_phrase_occurrences(self):
-        content = "# Title\n\n" + "attention " * 12
-        result = score_file("x.md", content, ["attention"], "attention", "attention")
-        assert result is not None
-        # 12 occurrences capped at 10 × 20
-        assert result["score"] >= 200.0
+        # 出现次数计入得分且封顶 10 次。长度归一化 (1/(1+ln(len))) 后绝对值
+        # 不再是 10×20, 改为相对断言: 次数多分高, 10 次与 12 次接近 (封顶)。
+        def score(n: int) -> float:
+            content = "# Title\n\n" + "attention " * n
+            r = score_file("x.md", content, ["attention"], "attention", "attention")
+            assert r is not None
+            return r["score"]
+
+        r5, r10, r12 = score(5), score(10), score(12)
+        assert r12 > r5  # 次数越多分越高
+        assert r12 == pytest.approx(r10, rel=0.2)  # 封顶: 超出 10 次不再显著增益
 
     def test_no_match_returns_none(self):
         assert score_file("x.md", "# Title\n\nbody", ["zzz"], "zzzqqq", "zzz qqq") is None
